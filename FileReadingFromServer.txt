@@ -1,0 +1,94 @@
+%let curr_day = %eval(%sysfunc(today())-0) ;
+
+%let fileday = %sysfunc(putn(&curr_day .,yymmddN8.)) ;
+%let host  =  ;             /* Provide your Host server name */
+%let user  =  ;             /* Provide user name */
+%let pass  =  ;             /* Provide password */
+
+%let mywork=%sysfunc(getoption(WORK));
+
+%put &fileday.  &host. &user. &pass.;run;
+
+
+%macro process(filename);
+
+data _null_;
+file "&mywork/test.cmd";
+put "user  &user &pass "; 
+put "lcd <Local Path>";     /* Provide Local path where you want to copy the file */
+put "cd <Server Path>";     /* Provide Server path from where you want to copy the file */
+put "get <File Name>";
+put "ls";
+put "quit"; 
+
+
+filename ftped pipe "ftp -n -v <server name>   < &mywork/test.cmd";
+;
+run;
+
+data _null_;
+infile ftped;
+input;
+put _infile_;
+run;
+
+
+data fileinfo;
+
+   /* Allocate file  */
+	  rc=FILENAME('myfile', 
+      "<Full File path>");
+   
+   /* Open file */
+   fid=FOPEN('myfile');
+
+   /* Get number of information  items */
+   infocnt=FOPTNUM(fid);
+
+   /* Retrieve information items and print to log */
+     x=FINFO(fid,upcase("File Size (bytes)"));
+     call symput('fsize',x);
+
+   /* Close the file */
+   rc=FCLOSE(fid);
+
+   /* Deallocate the file */
+   rc=FILENAME('myfile');
+run;
+%if &fsize= %then %do;
+  %let fsize=0;
+%end;
+%put fsize=&fsize;
+%if %eval(&fsize > 0) %then %do; 
+   data TEMP                                        ;
+             %let _EFIERR_ = 0; /* set the ERROR detection macro variable */
+	  infile "<Full File path>" delimiter = ',' 
+			MISSOVER DSD lrecl=32767 firstobs=2 ;
+
+     	 %include "<Path data structure file>";
+	run;
+
+%end;
+
+/* To delete the file from server */
+
+data _null_;
+file "&mywork/del_file.cmd";
+put "user  &user &pass "; 
+put "cd <Server path>";
+put "del <file name>";
+put "ls";
+put "quit"; 
+
+filename ftped pipe "ftp -n -v <server name>   < &mywork/del_file.cmd";
+;
+run;
+
+data _null_;
+infile ftped;
+input;
+put _infile_;
+run;  
+
+%mend process;
+%process(filename) ;
